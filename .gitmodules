@@ -1,0 +1,3 @@
+[submodule "fawkesproject"]
+	path = fawkesproject
+	url = git@github.com:trevorhorst/fawkesproject.git
