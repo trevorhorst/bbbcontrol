@@ -19,6 +19,7 @@
 #include "fawkes/core/command/command_handler.h"
 #include "fawkes/core/command/command_test.h"
 #include "fawkes/core/command/command_debug.h"
+#include "fawkes/core/command/command_env.h"
 
 #include "fawkes/console/console.h"
 #include "fawkes/console/command_console.h"
@@ -28,6 +29,7 @@
 #include "fawkes/http/client.h"
 #include "fawkes/http/router.h"
 
+#include "bbbcontrol/application.h"
 #include "bbbcontrol/resources/resources.h"
 
 enum OptionIndex {
@@ -42,131 +44,6 @@ const Option::Descriptor usage[] = {
     { HELP, 0, "h" , "help", Option::Arg::None, "  --help  \tPrint usage and exit." },
     { 0, 0, nullptr, nullptr, nullptr, nullptr }
 };
-
-int32_t serverCallback( const char *data )
-{
-    cJSON *parsed = cJSON_Parse( data );
-    if( parsed == nullptr ) {
-        LOG_WARN( "Command string is invalid: %s", data );
-    } else {
-        char *json = cJSON_Print( parsed );
-        LOG_INFO( "\n%s", json );
-        cJSON_free( json );
-    }
-    cJSON_Delete( parsed );
-    return 0;
-}
-
-void index( Fawkes::Http::Request *request, Fawkes::Http::Response *response )
-{
-    response->applyStatus( Fawkes::Http::OK );
-    response->addHeader( MHD_HTTP_HEADER_CONTENT_TYPE, Fawkes::Http::Server::type_text_html );
-    response->send( Resources::index_html, Resources::index_html_size );
-    LOG_INFO( "Index page sent" );
-}
-
-void bundle( Fawkes::Http::Request *request, Fawkes::Http::Response *response )
-{
-    response->applyStatus( Fawkes::Http::OK );
-    response->addHeader( MHD_HTTP_HEADER_CONTENT_TYPE, Fawkes::Http::Server::type_text_html );
-    response->send( Resources::bundle_js, Resources::bundle_js_size );
-    LOG_INFO( "Index page sent" );
-}
-
-
-void testHttp()
-{
-    Fawkes::Debug debug;
-    debug.setLevel( LOG_INFO );
-
-    Fawkes::CommandHandler handler;
-
-    Fawkes::Http::Router router;
-    Fawkes::Http::Server server;
-    auto idx = std::bind( (void(*)(Fawkes::Http::Request*, Fawkes::Http::Response*))&index
-                          , std::placeholders::_1, std::placeholders::_2);
-    router.addRoute( "/", MHD_HTTP_METHOD_GET, idx );
-    router.addRoute( "/index.html", MHD_HTTP_METHOD_GET, idx );
-    auto bdl = std::bind( (void(*)(Fawkes::Http::Request*, Fawkes::Http::Response*))&bundle
-                          , std::placeholders::_1, std::placeholders::_2);
-    router.addRoute( "/bundle.js", MHD_HTTP_METHOD_GET, bdl );
-    auto api = std::bind( &Fawkes::Http::Server::defaultAction, &server, std::placeholders::_1, std::placeholders::_2 );
-    router.addRoute( "/api", MHD_HTTP_METHOD_POST, api );
-    server.applyRouter( router );
-    server.applyCommandCallback( std::bind( &Fawkes::CommandHandler::process
-                                            , &handler
-                                            , std::placeholders::_1
-                                            , std::placeholders::_2 ) );
-
-    Fawkes::HttpClient client;
-
-    // Create a console instance and provide a client for use by the server
-    Fawkes::Console *console = &Fawkes::Console::getInstance();
-    console->applyClient( &client );
-
-    Fawkes::CommandConsole cmdConsole;
-    Fawkes::CommandHelp cmdHelp;
-    Fawkes::CommandTest cmdTest;
-    Fawkes::CommandDebug cmdDebug;
-    handler.addCommand( &cmdTest );
-    handler.addCommand( &cmdConsole );
-    handler.addCommand( &cmdHelp );
-    handler.addCommand( &cmdDebug );
-
-    server.listen();
-    std::thread *appThread = new std::thread( &Fawkes::Console::run, console );
-
-    appThread->join();
-
-    delete appThread;
-}
-
-void testConsole()
-{
-    Fawkes::Debug debug;
-    // Allows only INFO statements or higher to be printed
-    debug.setLevel( LOG_INFO );
-
-    Fawkes::CommandHandler handler;
-
-    // Create a server and provide a command handler callback
-    Fawkes::UnixServer server;
-    // server.applyCommandCallback( std::bind( serverCallback, std::placeholders::_1 ) );
-    server.applyCommandCallback( std::bind( &Fawkes::CommandHandler::process
-                                            , &handler
-                                            , std::placeholders::_1
-                                            , std::placeholders::_2 ) );
-
-    // Create a unix socket client and provide a path for socket creation
-    Fawkes::UnixClient client;
-    client.applySocketDestinationPath( server.socketPath() );
-
-    // Create a console instance and provide a client for use by the server
-    Fawkes::Console *console = &Fawkes::Console::getInstance();
-    console->applyClient( &client );
-
-    // Make sure the commands are initialized after their control objects
-    Fawkes::CommandConsole cmdConsole;
-    Fawkes::CommandHelp cmdHelp;
-    Fawkes::CommandTest cmdTest;
-    Fawkes::CommandDebug cmdDebug;
-    handler.addCommand( &cmdTest );
-    handler.addCommand( &cmdConsole );
-    handler.addCommand( &cmdHelp );
-    handler.addCommand( &cmdDebug );
-
-    std::thread *serverThread = new std::thread( &Fawkes::UnixServer::listen, &server );
-    std::thread *appThread = new std::thread( &Fawkes::Console::run, console );
-
-    appThread->join();
-
-    // Once the application thread has stopped, stop the server from listening
-    server.stop();
-    serverThread->join();
-
-    delete appThread;
-    delete serverThread;
-}
 
 void testResources()
 {
@@ -195,10 +72,8 @@ int main( int argc, char *argv[] )
         return 0;
     }
 
-    // testUnixServer();
-    // testConsole();
-    testHttp();
-    // testResources();
+    Application app;
+    app.run();
 
     return 0;
 }
