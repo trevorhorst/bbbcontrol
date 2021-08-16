@@ -1,5 +1,27 @@
 cmake_minimum_required( VERSION 3.5 )
 
+# Helper function to add preprocesor definition of FILE_BASENAME
+# to pass the filename without directory path for debugging use.
+#
+# Example:
+#
+#   define_file_basename_for_sources(my_target)
+#
+# Will add -DFILE_BASENAME="filename" for each source file depended on
+# by my_target, where filename is the name of the file.
+#
+function(define_file_basename_for_sources targetname)
+    get_target_property(source_files "${targetname}" SOURCES)
+    foreach(sourcefile ${source_files})
+        # Add the FILE_BASENAME=filename compile definition to the list.
+        get_filename_component(basename "${sourcefile}" NAME)
+        # Set the updated compile definitions on the source file.
+        set_property(
+            SOURCE "${sourcefile}" APPEND
+            PROPERTY COMPILE_DEFINITIONS "__FILENAME__=\"${basename}\"")
+    endforeach()
+endfunction()
+
 # Need to figure out how to get this properly implemented
 # find_package( FawkesLibCore REQUIRED )
 
@@ -14,7 +36,7 @@ add_subdirectory( fawkesproject )
 enable_language( C ASM )
 
 set( CMAKE_CXX_FLAGS
-    "-D__FILENAME__='\"$(subst ${CMAKE_SOURCE_DIR}/,,$(abspath $<))\"'"
+    "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -Wextra -pedantic -O3"
     )
 
 set( CMAKE_CXX_STANDARD 14 )
@@ -24,10 +46,12 @@ set( FAWKES_EXAMPLE_INCLUDE_DIR include/bbbcontrol )
 set( FAWKES_EXAMPLE_SOURCE_DIR src )
 
 set( FAWKES_EXAMPLE_INCLUDES ${FAWKES_EXAMPLE_RESOURCES}
+        ${FAWKES_EXAMPLE_INCLUDE_DIR}/application.h
         ${FAWKES_EXAMPLE_INCLUDE_DIR}/resources/resources.h
     )
 
 set( FAWKES_EXAMPLE_SOURCES ${FAWKES_EXAMPLE_RESOURCES}
+        ${FAWKES_EXAMPLE_SOURCE_DIR}/application.cpp
         ${FAWKES_EXAMPLE_SOURCE_DIR}/main.cpp
         ${FAWKES_EXAMPLE_SOURCE_DIR}/resources/index.html.s
         ${FAWKES_EXAMPLE_SOURCE_DIR}/resources/bundle.js.s
@@ -38,6 +62,8 @@ add_executable(
         ${FAWKES_EXAMPLE_INCLUDES}
         ${FAWKES_EXAMPLE_SOURCES}
     )
+
+define_file_basename_for_sources( ${PROJECT_NAME} )
 
 target_include_directories(
     ${PROJECT_NAME} PUBLIC
